@@ -3,7 +3,6 @@
 export default async function handler(req, res) {
   console.log("📩 Webhook received");
 
-  // Telegram should use POST
   if (req.method !== "POST") {
     return res.status(200).json({
       ok: true,
@@ -15,7 +14,6 @@ export default async function handler(req, res) {
     const update = req.body;
 
     if (!update) {
-      console.log("⚠️ Empty update");
       return res.status(200).json({ ok: true });
     }
 
@@ -24,17 +22,24 @@ export default async function handler(req, res) {
     const CHANNEL_ID_2 = process.env.CHANNEL_ID_2;
     const PHOTO_FILE_ID = process.env.PHOTO_FILE_ID;
 
-    if (!BOT_TOKEN || !CHANNEL_ID_1 || !CHANNEL_ID_2 || !PHOTO_FILE_ID) {
+    if (
+      !BOT_TOKEN ||
+      !CHANNEL_ID_1 ||
+      !CHANNEL_ID_2 ||
+      !PHOTO_FILE_ID
+    ) {
       console.error("❌ Missing environment variables");
-      return res.status(200).json({ ok: false });
+
+      return res.status(200).json({
+        ok: false,
+        error: "Missing environment variables"
+      });
     }
 
-    // --------------------------------------------------
     // Telegram API helper
-    // --------------------------------------------------
-
     async function telegram(method, data = {}) {
-      const url = `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
+      const url =
+        `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
 
       try {
         const response = await fetch(url, {
@@ -55,6 +60,7 @@ export default async function handler(req, res) {
         }
 
         return result;
+
       } catch (error) {
         console.error(
           `❌ Telegram Request Error [${method}]:`,
@@ -68,17 +74,14 @@ export default async function handler(req, res) {
       }
     }
 
-    // --------------------------------------------------
-    // Only process private chat messages
-    // --------------------------------------------------
-
     const message = update.message;
 
+    // Ignore non-message updates
     if (!message || !message.chat) {
       return res.status(200).json({ ok: true });
     }
 
-    // Ignore groups/channels
+    // Only private chat
     if (message.chat.type !== "private") {
       return res.status(200).json({ ok: true });
     }
@@ -91,206 +94,163 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // --------------------------------------------------
-    // /start
-    // --------------------------------------------------
+    // Only /start
+    if (!text.startsWith("/start")) {
+      return res.status(200).json({ ok: true });
+    }
 
-    if (text.startsWith("/start")) {
-      console.log(`🚀 /start received from user: ${userId}`);
+    console.log(`🚀 /start received → User: ${userId}`);
 
-      /*
-        Supported start commands:
+    // =====================================================
+    // CHECK CHANNEL 1
+    // =====================================================
 
-        /start channel1
-        /start channel2
+    console.log(
+      `🔍 Checking Channel 1 → User ${userId}`
+    );
 
-        Or:
-
-        /start
-      */
-
-      const parts = text.trim().split(/\s+/);
-      const startParameter = parts[1] || "";
-
-      let selectedChannel = null;
-      let channelName = "";
-
-      if (
-        startParameter === "channel1" ||
-        startParameter === "ch1"
-      ) {
-        selectedChannel = CHANNEL_ID_1;
-        channelName = "Channel 1";
+    const channel1Result = await telegram(
+      "getChatMember",
+      {
+        chat_id: CHANNEL_ID_1,
+        user_id: userId
       }
+    );
 
-      if (
-        startParameter === "channel2" ||
-        startParameter === "ch2"
-      ) {
-        selectedChannel = CHANNEL_ID_2;
-        channelName = "Channel 2";
-      }
+    let channel1Member = false;
 
-      // --------------------------------------------------
-      // If no channel parameter
-      // --------------------------------------------------
+    if (channel1Result.ok) {
+      const status1 = channel1Result.result?.status;
 
-      if (!selectedChannel) {
-        console.log(
-          `⚠️ No channel parameter for user: ${userId}`
-        );
-
-        await telegram("sendMessage", {
-          chat_id: chatId,
-          text:
-            "👋 Welcome!\n\n" +
-            "Please use the correct channel start link.\n\n" +
-            "🔹 Channel 1 → /start channel1\n" +
-            "🔹 Channel 2 → /start channel2"
-        });
-
-        return res.status(200).json({ ok: true });
-      }
-
-      // --------------------------------------------------
-      // Check membership
-      // --------------------------------------------------
+      channel1Member =
+        status1 === "member" ||
+        status1 === "administrator" ||
+        status1 === "creator";
 
       console.log(
-        `🔍 Checking membership: User ${userId} → ${channelName}`
-      );
-
-      const memberResult = await telegram(
-        "getChatMember",
-        {
-          chat_id: selectedChannel,
-          user_id: userId
-        }
-      );
-
-      if (!memberResult.ok) {
-        console.error(
-          `❌ Membership check failed for user ${userId}`
-        );
-
-        await telegram("sendMessage", {
-          chat_id: chatId,
-          text:
-            "⚠️ I couldn't verify your channel membership.\n\n" +
-            "Please join the channel and try /start again."
-        });
-
-        return res.status(200).json({ ok: true });
-      }
-
-      const memberStatus = memberResult.result?.status;
-
-      const isMember =
-        memberStatus === "member" ||
-        memberStatus === "administrator" ||
-        memberStatus === "creator";
-
-      console.log(
-        `👤 Membership result: ${memberStatus} → ${
-          isMember ? "MEMBER ✅" : "NOT MEMBER ❌"
+        `📢 Channel 1 status: ${status1} → ${
+          channel1Member ? "MEMBER ✅" : "NOT MEMBER ❌"
         }`
       );
+    }
 
-      // --------------------------------------------------
-      // User is NOT member
-      // --------------------------------------------------
+    // =====================================================
+    // CHECK CHANNEL 2
+    // =====================================================
 
-      if (!isMember) {
-        await telegram("sendMessage", {
-          chat_id: chatId,
-          text:
-            "🚨 ACCESS REQUIRED\n\n" +
-            `📢 Please join ${channelName} first.\n\n` +
-            "✅ After joining, come back and send /start again."
-        });
+    console.log(
+      `🔍 Checking Channel 2 → User ${userId}`
+    );
 
-        return res.status(200).json({ ok: true });
+    const channel2Result = await telegram(
+      "getChatMember",
+      {
+        chat_id: CHANNEL_ID_2,
+        user_id: userId
       }
+    );
 
-      // --------------------------------------------------
-      // User IS member
-      // --------------------------------------------------
+    let channel2Member = false;
+
+    if (channel2Result.ok) {
+      const status2 = channel2Result.result?.status;
+
+      channel2Member =
+        status2 === "member" ||
+        status2 === "administrator" ||
+        status2 === "creator";
 
       console.log(
-        `✅ User ${userId} is a member of ${channelName}`
+        `📢 Channel 2 status: ${status2} → ${
+          channel2Member ? "MEMBER ✅" : "NOT MEMBER ❌"
+        }`
+      );
+    }
+
+    // =====================================================
+    // USER MUST BE IN AT LEAST ONE CHANNEL
+    // =====================================================
+
+    const isMember =
+      channel1Member || channel2Member;
+
+    if (!isMember) {
+      console.log(
+        `❌ User ${userId} is not a member of either channel`
       );
 
-      // --------------------------------------------------
-      // Prevent duplicate content for the same update
-      // --------------------------------------------------
-
-      const updateId = update.update_id;
-
-      if (!globalThis.processedUpdates) {
-        globalThis.processedUpdates = new Set();
-      }
-
-      if (processedUpdates.has(updateId)) {
-        console.log(
-          `♻️ Duplicate update ignored: ${updateId}`
-        );
-
-        return res.status(200).json({ ok: true });
-      }
-
-      processedUpdates.add(updateId);
-
-      // Keep memory small
-      if (processedUpdates.size > 1000) {
-        const first = processedUpdates.values().next().value;
-        processedUpdates.delete(first);
-      }
-
-      // --------------------------------------------------
-      // Send Photo + Caption
-      // --------------------------------------------------
-
-      const caption =
-        "🎉✨ WELCOME! ✨🎉\n\n" +
-        "🔥 You are successfully verified!\n" +
-        "✅ Channel membership confirmed.\n\n" +
-        "🚀 Your access is now ready!\n" +
-        "💎 Enjoy the content!\n\n" +
-        "⚡️ Stay Active • Stay Updated ⚡️";
-
-      const photoResult = await telegram("sendPhoto", {
+      await telegram("sendMessage", {
         chat_id: chatId,
-        photo: PHOTO_FILE_ID,
-        caption: caption
+        text:
+          "🚨 ACCESS REQUIRED\n\n" +
+          "📢 Please join at least one of our channels first.\n\n" +
+          "✅ After joining, send /start again."
       });
-
-      if (photoResult.ok) {
-        console.log(
-          `🖼️ Photo + caption sent successfully → User ${userId}`
-        );
-      } else {
-        console.error(
-          `❌ Failed to send photo → User ${userId}`
-        );
-      }
 
       return res.status(200).json({ ok: true });
     }
 
-    // --------------------------------------------------
-    // Ignore other messages
-    // --------------------------------------------------
+    // =====================================================
+    // MEMBER FOUND
+    // =====================================================
 
     console.log(
-      `ℹ️ Non-/start message received from user: ${userId}`
+      `✅ User ${userId} verified successfully`
     );
 
-    return res.status(200).json({ ok: true });
+    if (channel1Member) {
+      console.log(
+        `🎯 Verified through Channel 1`
+      );
+    }
+
+    if (channel2Member) {
+      console.log(
+        `🎯 Verified through Channel 2`
+      );
+    }
+
+    // =====================================================
+    // SEND PHOTO + CAPTION
+    // =====================================================
+
+    const caption =
+      "🎉✨ WELCOME! ✨🎉\n\n" +
+      "🔥 You are successfully verified!\n" +
+      "✅ Channel membership confirmed.\n\n" +
+      "🚀 Your access is now ready!\n" +
+      "💎 Enjoy the content!\n\n" +
+      "⚡️ Stay Active • Stay Updated ⚡️";
+
+    const photoResult = await telegram(
+      "sendPhoto",
+      {
+        chat_id: chatId,
+        photo: PHOTO_FILE_ID,
+        caption: caption
+      }
+    );
+
+    if (photoResult.ok) {
+      console.log(
+        `🖼️ PHOTO SENT SUCCESSFULLY → User ${userId}`
+      );
+    } else {
+      console.error(
+        `❌ PHOTO SEND FAILED → User ${userId}`
+      );
+    }
+
+    return res.status(200).json({
+      ok: true
+    });
 
   } catch (error) {
-    console.error("❌ Webhook error:", error);
+    console.error(
+      "❌ Webhook error:",
+      error
+    );
 
-    // Always return 200 to Telegram
     return res.status(200).json({
       ok: false,
       error: "Internal processing error"
