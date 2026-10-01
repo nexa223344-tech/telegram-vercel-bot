@@ -3,10 +3,6 @@
 export default async function handler(req, res) {
   console.log("📩 Webhook received");
 
-  // ==================================================
-  // GET REQUEST
-  // ==================================================
-
   if (req.method !== "POST") {
     return res.status(200).json({
       ok: true,
@@ -18,16 +14,8 @@ export default async function handler(req, res) {
     const update = req.body;
 
     if (!update) {
-      console.log("⚠️ Empty update");
-
-      return res.status(200).json({
-        ok: true
-      });
+      return res.status(200).json({ ok: true });
     }
-
-    // ==================================================
-    // ENV VARIABLES
-    // ==================================================
 
     const BOT_TOKEN = process.env.BOT_TOKEN;
     const CHANNEL_ID_1 = process.env.CHANNEL_ID_1;
@@ -48,10 +36,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // ==================================================
-    // TELEGRAM API FUNCTION
-    // ==================================================
-
     async function telegram(method, data = {}) {
       const url =
         `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
@@ -59,11 +43,9 @@ export default async function handler(req, res) {
       try {
         const response = await fetch(url, {
           method: "POST",
-
           headers: {
             "Content-Type": "application/json"
           },
-
           body: JSON.stringify(data)
         });
 
@@ -77,7 +59,6 @@ export default async function handler(req, res) {
         }
 
         return result;
-
       } catch (error) {
         console.error(
           `❌ Telegram Request Error [${method}]:`,
@@ -91,28 +72,14 @@ export default async function handler(req, res) {
       }
     }
 
-    // ==================================================
-    // GET MESSAGE
-    // ==================================================
-
     const message = update.message;
 
-    // Ignore other updates
     if (!message || !message.chat) {
-      console.log("ℹ️ Non-message update ignored");
-
-      return res.status(200).json({
-        ok: true
-      });
+      return res.status(200).json({ ok: true });
     }
 
-    // Only private chat
     if (message.chat.type !== "private") {
-      console.log("ℹ️ Non-private message ignored");
-
-      return res.status(200).json({
-        ok: true
-      });
+      return res.status(200).json({ ok: true });
     }
 
     const userId = message.from?.id;
@@ -120,38 +87,18 @@ export default async function handler(req, res) {
     const text = message.text || "";
 
     if (!userId) {
-      console.log("⚠️ User ID not found");
-
-      return res.status(200).json({
-        ok: true
-      });
+      return res.status(200).json({ ok: true });
     }
-
-    // ==================================================
-    // ONLY /START
-    // ==================================================
 
     if (!text.startsWith("/start")) {
-      console.log(
-        `ℹ️ Non-start message → User ${userId}`
-      );
-
-      return res.status(200).json({
-        ok: true
-      });
+      return res.status(200).json({ ok: true });
     }
 
-    console.log(
-      `🚀 /start received → User ${userId}`
-    );
+    console.log(`🚀 /start received → ${userId}`);
 
     // ==================================================
-    // CHANNEL 1 CHECK
+    // CHANNEL 1
     // ==================================================
-
-    console.log(
-      `🔍 Checking Channel 1 → User ${userId}`
-    );
 
     const channel1Result = await telegram(
       "getChatMember",
@@ -164,11 +111,7 @@ export default async function handler(req, res) {
     let channel1Member = false;
 
     if (channel1Result.ok) {
-      const status1 =
-        channel1Result.result?.status;
-
-      const isMember1 =
-        channel1Result.result?.is_member === true;
+      const status1 = channel1Result.result?.status;
 
       channel1Member =
         status1 === "member" ||
@@ -176,35 +119,24 @@ export default async function handler(req, res) {
         status1 === "creator" ||
         (
           status1 === "restricted" &&
-          isMember1
+          channel1Result.result?.is_member === true
         );
 
       console.log(
-        `📢 Channel 1 status: ${status1}`
-      );
-
-      console.log(
-        `📢 Channel 1 member: ${
-          channel1Member
-            ? "YES ✅"
-            : "NO ❌"
+        `📢 Channel 1: ${status1} → ${
+          channel1Member ? "MEMBER ✅" : "NOT MEMBER ❌"
         }`
       );
-
     } else {
       console.error(
-        "❌ Channel 1 membership check failed:",
+        "❌ Channel 1 check:",
         channel1Result.description
       );
     }
 
     // ==================================================
-    // CHANNEL 2 CHECK
+    // CHANNEL 2
     // ==================================================
-
-    console.log(
-      `🔍 Checking Channel 2 → User ${userId}`
-    );
 
     const channel2Result = await telegram(
       "getChatMember",
@@ -217,11 +149,7 @@ export default async function handler(req, res) {
     let channel2Member = false;
 
     if (channel2Result.ok) {
-      const status2 =
-        channel2Result.result?.status;
-
-      const isMember2 =
-        channel2Result.result?.is_member === true;
+      const status2 = channel2Result.result?.status;
 
       channel2Member =
         status2 === "member" ||
@@ -229,23 +157,17 @@ export default async function handler(req, res) {
         status2 === "creator" ||
         (
           status2 === "restricted" &&
-          isMember2
+          channel2Result.result?.is_member === true
         );
 
       console.log(
-        `📢 Channel 2 status: ${status2}`
+        `📢 Channel 2: ${status2} → ${
+          channel2Member ? "MEMBER ✅" : "NOT MEMBER ❌"
+        }`
       );
-
-      console.log(
-        `📢 Channel 2 member: ${
-          channel2Member
-            ? "YES ✅"
-            : "NO ❌"
-        }`;
-
     } else {
       console.error(
-        "❌ Channel 2 membership check failed:",
+        "❌ Channel 2 check:",
         channel2Result.description
       );
     }
@@ -254,62 +176,30 @@ export default async function handler(req, res) {
     // AT LEAST ONE CHANNEL
     // ==================================================
 
-    const isMember =
-      channel1Member ||
-      channel2Member;
-
-    if (!isMember) {
+    if (!channel1Member && !channel2Member) {
       console.log(
-        `❌ User ${userId} is NOT a member of either channel`
+        `❌ User ${userId} is not in either channel`
       );
 
-      await telegram(
-        "sendMessage",
-        {
-          chat_id: chatId,
-
-          text:
-            "🚨 ACCESS REQUIRED\n\n" +
-            "📢 Please join at least one of our channels first.\n\n" +
-            "✅ After joining, send /start again."
-        }
-      );
+      await telegram("sendMessage", {
+        chat_id: chatId,
+        text:
+          "🚨 ACCESS REQUIRED\n\n" +
+          "📢 Please join at least one of our channels first.\n\n" +
+          "✅ After joining, send /start again."
+      });
 
       return res.status(200).json({
         ok: true
       });
     }
 
-    // ==================================================
-    // VERIFIED
-    // ==================================================
-
-    console.log(
-      `========================================`
-    );
-
     console.log(
       `✅ USER VERIFIED → ${userId}`
     );
 
-    if (channel1Member) {
-      console.log(
-        `🎯 Verified through Channel 1`
-      );
-    }
-
-    if (channel2Member) {
-      console.log(
-        `🎯 Verified through Channel 2`
-      );
-    }
-
-    console.log(
-      `========================================`
-    );
-
     // ==================================================
-    // EXACT ORIGINAL CAPTION
+    // EXACT CAPTION
     // ==================================================
 
     const caption =
@@ -318,28 +208,19 @@ export default async function handler(req, res) {
       "⚡ Super Working & Ready to Use!";
 
     // ==================================================
-    // SEND PHOTO + CUSTOM EMOJIS + USERNAME
+    // SEND PHOTO
     // ==================================================
-
-    console.log(
-      `🖼️ Sending original photo + caption → User ${userId}`
-    );
 
     const photoResult = await telegram(
       "sendPhoto",
       {
         chat_id: chatId,
-
         photo: PHOTO_FILE_ID,
-
         caption: caption,
 
         caption_entities: [
 
-          // ------------------------------------------
-          // 🔥 CUSTOM EMOJI
-          // ------------------------------------------
-
+          // 🔥 custom emoji
           {
             offset: 0,
             length: 2,
@@ -348,20 +229,14 @@ export default async function handler(req, res) {
               "6264785189394717307"
           },
 
-          // ------------------------------------------
-          // IF ANYONE NEEDS A VIP ADMIN PANEL,
-          // ------------------------------------------
-
+          // If anyone needs a VIP Admin Panel,
           {
             offset: 2,
-            length: 35,
+            length: 34,
             type: "bold"
           },
 
-          // ------------------------------------------
-          // 🕺 CUSTOM EMOJI
-          // ------------------------------------------
-
+          // 🕺 custom emoji
           {
             offset: 37,
             length: 2,
@@ -370,20 +245,14 @@ export default async function handler(req, res) {
               "5474546696245496182"
           },
 
-          // ------------------------------------------
           // DM me FAST!
-          // ------------------------------------------
-
           {
             offset: 41,
-            length: 12,
+            length: 11,
             type: "bold"
           },
 
-          // ------------------------------------------
-          // 💌 CUSTOM EMOJI
-          // ------------------------------------------
-
+          // 💌 custom emoji
           {
             offset: 53,
             length: 2,
@@ -392,35 +261,28 @@ export default async function handler(req, res) {
               "5253742260054409879"
           },
 
-          // ------------------------------------------
-          // SPACE / BOLD
-          // ------------------------------------------
-
-          {
-            offset: 55,
-            length: 1,
-            type: "bold"
-          },
-
-          // ------------------------------------------
           // @wingohacker007
-          // ------------------------------------------
-
           {
-            offset: 57,
-            length: 14,
+            offset: 56,
+            length: 15,
             type: "text_link",
             url:
               "https://t.me/m/jHTUCQLUN2M1"
           },
 
-          // ------------------------------------------
-          // ⚡ SUPER WORKING & READY TO USE!
-          // ------------------------------------------
-
+          // ⚡ custom emoji
           {
             offset: 73,
-            length: 31,
+            length: 2,
+            type: "custom_emoji",
+            custom_emoji_id:
+              "YOUR_ELECTRIC_EMOJI_ID"
+          },
+
+          // Super Working & Ready to Use!
+          {
+            offset: 75,
+            length: 29,
             type: "bold"
           }
         ]
@@ -428,56 +290,20 @@ export default async function handler(req, res) {
     );
 
     // ==================================================
-    // PHOTO RESULT
+    // RESULT
     // ==================================================
 
     if (photoResult.ok) {
-
       console.log(
-        `========================================`
+        `✅ PHOTO + CAPTION SENT → ${userId}`
       );
-
-      console.log(
-        `✅ PHOTO SENT SUCCESSFULLY`
-      );
-
-      console.log(
-        `👤 User: ${userId}`
-      );
-
-      console.log(
-        `📸 Animated caption: YES`
-      );
-
-      console.log(
-        `👤 Username link: YES`
-      );
-
-      console.log(
-        `========================================`
-      );
-
     } else {
-
       console.error(
-        `========================================`
+        `❌ PHOTO SEND FAILED → ${userId}`
       );
 
       console.error(
-        `❌ PHOTO SEND FAILED`
-      );
-
-      console.error(
-        `👤 User: ${userId}`
-      );
-
-      console.error(
-        `❌ Telegram Error:`,
-        photoResult.description
-      );
-
-      console.error(
-        `========================================`
+        `❌ Telegram Error: ${photoResult.description}`
       );
     }
 
@@ -486,7 +312,6 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-
     console.error(
       "❌ WEBHOOK ERROR:",
       error
