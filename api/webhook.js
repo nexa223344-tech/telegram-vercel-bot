@@ -3,6 +3,7 @@
 export default async function handler(req, res) {
   console.log("📩 Webhook received");
 
+  // GET request test
   if (req.method !== "POST") {
     return res.status(200).json({
       ok: true,
@@ -20,13 +21,18 @@ export default async function handler(req, res) {
     const BOT_TOKEN = process.env.BOT_TOKEN;
     const CHANNEL_ID_1 = process.env.CHANNEL_ID_1;
     const CHANNEL_ID_2 = process.env.CHANNEL_ID_2;
-    const PHOTO_FILE_ID = process.env.PHOTO_FILE_ID;
 
+    // Original message details
+    const SOURCE_CHAT_ID = process.env.SOURCE_CHAT_ID;
+    const SOURCE_MESSAGE_ID = process.env.SOURCE_MESSAGE_ID;
+
+    // Check environment variables
     if (
       !BOT_TOKEN ||
       !CHANNEL_ID_1 ||
       !CHANNEL_ID_2 ||
-      !PHOTO_FILE_ID
+      !SOURCE_CHAT_ID ||
+      !SOURCE_MESSAGE_ID
     ) {
       console.error("❌ Missing environment variables");
 
@@ -36,6 +42,7 @@ export default async function handler(req, res) {
       });
     }
 
+    // Telegram API helper
     async function telegram(method, data = {}) {
       const url =
         `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
@@ -59,6 +66,7 @@ export default async function handler(req, res) {
         }
 
         return result;
+
       } catch (error) {
         console.error(
           `❌ Telegram Request Error [${method}]:`,
@@ -72,12 +80,14 @@ export default async function handler(req, res) {
       }
     }
 
+    // Get Telegram message
     const message = update.message;
 
     if (!message || !message.chat) {
       return res.status(200).json({ ok: true });
     }
 
+    // Only private chat
     if (message.chat.type !== "private") {
       return res.status(200).json({ ok: true });
     }
@@ -90,6 +100,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // Only /start
     if (!text.startsWith("/start")) {
       return res.status(200).json({ ok: true });
     }
@@ -97,7 +108,7 @@ export default async function handler(req, res) {
     console.log(`🚀 /start received → ${userId}`);
 
     // ==================================================
-    // CHANNEL 1
+    // CHECK CHANNEL 1
     // ==================================================
 
     const channel1Result = await telegram(
@@ -124,18 +135,15 @@ export default async function handler(req, res) {
 
       console.log(
         `📢 Channel 1: ${status1} → ${
-          channel1Member ? "MEMBER ✅" : "NOT MEMBER ❌"
+          channel1Member
+            ? "MEMBER ✅"
+            : "NOT MEMBER ❌"
         }`
-      );
-    } else {
-      console.error(
-        "❌ Channel 1 check:",
-        channel1Result.description
       );
     }
 
     // ==================================================
-    // CHANNEL 2
+    // CHECK CHANNEL 2
     // ==================================================
 
     const channel2Result = await telegram(
@@ -162,130 +170,59 @@ export default async function handler(req, res) {
 
       console.log(
         `📢 Channel 2: ${status2} → ${
-          channel2Member ? "MEMBER ✅" : "NOT MEMBER ❌"
+          channel2Member
+            ? "MEMBER ✅"
+            : "NOT MEMBER ❌"
         }`
-      );
-    } else {
-      console.error(
-        "❌ Channel 2 check:",
-        channel2Result.description
       );
     }
 
     // ==================================================
-    // AT LEAST ONE CHANNEL
+    // USER MUST BE IN AT LEAST ONE CHANNEL
     // ==================================================
 
     if (!channel1Member && !channel2Member) {
+
       console.log(
         `❌ User ${userId} is not in either channel`
       );
 
-      await telegram("sendMessage", {
-        chat_id: chatId,
-        text:
-          "🚨 ACCESS REQUIRED\n\n" +
-          "📢 Please join at least one of our channels first.\n\n" +
-          "✅ After joining, send /start again."
-      });
+      await telegram(
+        "sendMessage",
+        {
+          chat_id: chatId,
+          text:
+            "🚨 ACCESS REQUIRED\n\n" +
+            "📢 Please join at least one of our channels first.\n\n" +
+            "✅ After joining, send /start again."
+        }
+      );
 
       return res.status(200).json({
         ok: true
       });
     }
 
+    // ==================================================
+    // VERIFIED
+    // ==================================================
+
     console.log(
       `✅ USER VERIFIED → ${userId}`
     );
 
     // ==================================================
-    // EXACT CAPTION
+    // COPY ORIGINAL MESSAGE
     // ==================================================
 
-    const caption =
-      "🔥If anyone needs a VIP Admin Panel, 🕺\n\n" +
-      "DM me FAST! 💌 @wingohacker007\n\n" +
-      "⚡ Super Working & Ready to Use!";
-
-    // ==================================================
-    // SEND PHOTO
-    // ==================================================
-
-    const photoResult = await telegram(
-      "sendPhoto",
+    const copyResult = await telegram(
+      "copyMessage",
       {
         chat_id: chatId,
-        photo: PHOTO_FILE_ID,
-        caption: caption,
 
-        caption_entities: [
+        from_chat_id: SOURCE_CHAT_ID,
 
-          // 🔥 custom emoji
-          {
-            offset: 0,
-            length: 2,
-            type: "custom_emoji",
-            custom_emoji_id:
-              "6264785189394717307"
-          },
-
-          // If anyone needs a VIP Admin Panel,
-          {
-            offset: 2,
-            length: 34,
-            type: "bold"
-          },
-
-          // 🕺 custom emoji
-          {
-            offset: 37,
-            length: 2,
-            type: "custom_emoji",
-            custom_emoji_id:
-              "5474546696245496182"
-          },
-
-          // DM me FAST!
-          {
-            offset: 41,
-            length: 11,
-            type: "bold"
-          },
-
-          // 💌 custom emoji
-          {
-            offset: 53,
-            length: 2,
-            type: "custom_emoji",
-            custom_emoji_id:
-              "5253742260054409879"
-          },
-
-          // @wingohacker007
-          {
-            offset: 56,
-            length: 15,
-            type: "text_link",
-            url:
-              "https://t.me/m/jHTUCQLUN2M1"
-          },
-
-          // ⚡ custom emoji
-          {
-            offset: 73,
-            length: 2,
-            type: "custom_emoji",
-            custom_emoji_id:
-              "YOUR_ELECTRIC_EMOJI_ID"
-          },
-
-          // Super Working & Ready to Use!
-          {
-            offset: 75,
-            length: 29,
-            type: "bold"
-          }
-        ]
+        message_id: Number(SOURCE_MESSAGE_ID)
       }
     );
 
@@ -293,17 +230,31 @@ export default async function handler(req, res) {
     // RESULT
     // ==================================================
 
-    if (photoResult.ok) {
+    if (copyResult.ok) {
+
       console.log(
-        `✅ PHOTO + CAPTION SENT → ${userId}`
+        `✅ ORIGINAL MESSAGE COPIED → ${userId}`
       );
+
     } else {
+
       console.error(
-        `❌ PHOTO SEND FAILED → ${userId}`
+        `❌ COPY MESSAGE FAILED → ${userId}`
       );
 
       console.error(
-        `❌ Telegram Error: ${photoResult.description}`
+        `❌ Telegram Error: ${copyResult.description}`
+      );
+
+      // Send error only if copy failed
+      await telegram(
+        "sendMessage",
+        {
+          chat_id: chatId,
+          text:
+            "⚠️ Message send failed.\n\n" +
+            "Please try /start again."
+        }
       );
     }
 
@@ -312,11 +263,14 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
+
     console.error(
       "❌ WEBHOOK ERROR:",
       error
     );
 
+    // IMPORTANT:
+    // Always return 200 to Telegram
     return res.status(200).json({
       ok: false,
       error: "Internal processing error"
